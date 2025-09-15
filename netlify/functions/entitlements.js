@@ -1,31 +1,59 @@
 // netlify/functions/entitlements.js
-// Returns {status: "free"|"paid"|"none"}
-// Simple version: free via whitelist.json, paid emails stored in Netlify KV (or fallback to in-memory map)
-import fs from "node:fs/promises";
+import fs from 'node:fs';
+import path from 'node:path';
 
-// Use Netlify KV if available; fallback to in-memory (resets on cold start)
-let paidEmails = new Set();
+const PAID_PATH = path.join(
+  process.cwd(),
+  'netlify',
+  'functions',
+  'data',
+  'paid.json'
+);
 
-export default async (req, context) => {
+const getEnv = (k) =>
+  typeof Deno !== 'undefined' && Deno.env?.get
+    ? Deno.env.get(k)
+    : process.env[k];
+
+const parseList = (s) =>
+  (s || '')
+    .toLowerCase()
+    .split(/[,\s;]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+const json = (obj, status = 200) =>
+  new Response(JSON.stringify(obj), {
+    status,
+    headers: {
+      'content-type': 'application/json',
+      'cache-control': 'no-store',
+    },
+  });
+
+export default async (req) => {
   try {
     const url = new URL(req.url);
-    const email = url.searchParams.get("email");
-    if (!email) return new Response("Missing email", { status: 400 });
+    const email = url.searchParams.get('email')?.trim().toLowerCase();
+    if (!email) return json({ status: 'none', reason: 'missing email' });
 
-    // Check whitelist
-    const raw = await fs.readFile("./whitelist.json", "utf-8");
-    const whitelist = JSON.parse(raw).free_emails || [];
-    if (whitelist.map(e => e.toLowerCase().trim()).includes(email.toLowerCase().trim())) {
-      return Response.json({ status: "free" });
-    }
+    // 1) listas por ENV
+    const free = parseList(getEnv('FREE_EMAILS'));
+    const forced = parseList(getEnv('FORCE_PAID_EMAILS'));
 
-    // Check paid (in-memory)
-    if (paidEmails.has(email.toLowerCase().trim())) {
-      return Response.json({ status: "paid" });
-    }
+    if (free.includes(email)) return json({ status: 'free' });
+    if (forced.includes(email)) return json({ status: 'paid' });
 
-    return Response.json({ status: "none" });
-  } catch (err) {
-    return new Response("Error: " + err.message, { status: 500 });
+    // 2) archivo local (dev) escrito por el webhook
+    try {
+      const paidList = JSON.parse(fs.readFileSync(PAID_PATH, 'utf8'));
+      if (Array.isArray(paidList) && paidList.includes(email)) {
+        return json({ status: 'paid' });
+      }
+    } catch {}
+
+    return json({ status: 'none' });
+  } catch (e) {
+    return json({ status: 'none', error: String(e?.message || e) });
   }
 };

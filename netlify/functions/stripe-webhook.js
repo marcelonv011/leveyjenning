@@ -1,28 +1,60 @@
 // netlify/functions/stripe-webhook.js
-// Stripe Webhook: on checkout.session.completed, mark email as paid in memory (or Netlify KV)
-// ENV needed: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
-import Stripe from "stripe";
+import Stripe from 'stripe';
+import fs from 'node:fs';
+import path from 'node:path';
 
-// Same in-memory store used by entitlements.js during warm runtime
-const paidEmails = globalThis._paidEmails || new Set();
-globalThis._paidEmails = paidEmails;
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-export default async (req, context) => {
+// archivo local para "pagados" en dev
+const PAID_PATH = path.join(
+  process.cwd(),
+  'netlify',
+  'functions',
+  'data',
+  'paid.json'
+);
+
+function readPaid() {
   try {
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" });
-    const sig = req.headers.get("stripe-signature");
-    const rawBody = await req.text();
-    const event = stripe.webhooks.constructEvent(rawBody, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    return JSON.parse(fs.readFileSync(PAID_PATH, 'utf8'));
+  } catch {
+    return [];
+  }
+}
+function writePaid(list) {
+  try {
+    fs.writeFileSync(PAID_PATH, JSON.stringify(list, null, 2));
+  } catch {}
+}
 
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object;
-      const email = session.customer_details?.email || session.customer_email;
-      if (email) {
-        paidEmails.add(email.toLowerCase().trim());
+export default async (req) => {
+  let event;
+  const sig = req.headers.get('stripe-signature');
+
+  try {
+    const rawBody = await req.text();
+    event = stripe.webhooks.constructEvent(rawBody, sig, endpointSecret);
+  } catch (err) {
+    return new Response(`Webhook Error: ${err.message}`, { status: 400 });
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    // email puede venir en customer_details.email
+    const email =
+      session?.customer_details?.email || session?.metadata?.app_email || '';
+    if (email) {
+      const list = readPaid();
+      if (!list.includes(email.toLowerCase())) {
+        list.push(email.toLowerCase());
+        writePaid(list);
       }
     }
-    return new Response("ok", { status: 200 });
-  } catch (err) {
-    return new Response("Webhook Error: " + err.message, { status: 400 });
   }
+
+  return new Response(JSON.stringify({ received: true }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
 };

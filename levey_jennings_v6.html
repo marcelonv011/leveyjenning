@@ -11,14 +11,12 @@
     --field-bg:#0b1020; --field-border:#263148; --field-text:#e5e7eb; --field-placeholder:#94a3b8;
     --btn-bg:#2563eb; --btn-text:#fff; --btn-secondary:#334155;
   }
-  /* Tema claro */
   .theme-light{
     --bg:#f5f7fb; --card:#ffffff; --muted:#4b5563; --text:#111827;
     --grid:#e5e7eb; --axis:#475569; --accent:#111827;
     --field-bg:#ffffff; --field-border:#cbd5e1; --field-text:#111827; --field-placeholder:#6b7280;
     --btn-bg:#1d4ed8; --btn-text:#fff; --btn-secondary:#e5e7eb;
   }
-  /* Preto & branco (alto contraste) */
   .theme-bw{
     --bg:#ffffff; --card:#ffffff; --muted:#222; --text:#000;
     --grid:#cfcfcf; --axis:#000; --accent:#000; --series:#000;
@@ -38,7 +36,8 @@
     font-size:14px; outline:none; box-shadow:0 1px 0 rgba(0,0,0,.03) inset;
   }
   textarea::placeholder, input::placeholder{ color:var(--field-placeholder); }
-  select{ appearance:none; background-image:
+  select{
+    appearance:none; background-image:
       linear-gradient(45deg, transparent 50%, var(--axis) 50%),
       linear-gradient(135deg, var(--axis) 50%, transparent 50%),
       linear-gradient(to right, transparent, transparent);
@@ -47,10 +46,7 @@
     padding-right: 32px;
   }
   textarea:focus,input:focus,select:focus{ border-color: var(--btn-bg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--btn-bg) 25%, transparent); }
-
-  input[type="color"]{
-    height: 40px; padding:0; border-radius:8px; cursor:pointer;
-  }
+  input[type="color"]{height:40px;padding:0;border-radius:8px;cursor:pointer}
 
   .grid{display:grid;gap:1rem}
   @media(min-width:1200px){ .grid{grid-template-columns:2fr 2fr 1fr 1fr} }
@@ -66,24 +62,38 @@
   .foot{opacity:.85;margin-top:.6rem;font-size:.84rem}
   .disabled{opacity:.6; pointer-events:none}
 
-  /* Botão Voltar */
   .backbtn{
     position:fixed; top:12px; left:12px; z-index:9999;
     background:#111827; color:#e5e7eb; border:1px solid #263148;
     padding:8px 12px; border-radius:10px; font-family:system-ui; cursor:pointer;
   }
 
-  @media print{
-    body{background:#fff;color:#000;padding:0}
-    .card{box-shadow:none;border-radius:0}
-    .no-print{display:none!important}
-    svg{height:800px}
+  /* NOVO: faixa grande de tentativas */
+  .quota{
+    max-width:1200px; margin: 0 auto 12px auto;
+    background:#0b1020; border:1px solid #263148; color:#e5e7eb;
+    padding:10px 12px; border-radius:12px; box-shadow:0 8px 20px rgba(0,0,0,.25);
+    display:flex; align-items:center; gap:10px;
   }
+  .quota .dot{width:10px;height:10px;border-radius:999px;background:#f59e0b}
+  .quota b{color:#fff}
+  .quota.free .dot{background:#22c55e}
+  .quota.none .dot{background:#ef4444}
+  .quota .spacer{flex:1}
+  .quota .small{opacity:.8;font-size:.9rem}
+  @media print{ .no-print{display:none!important} }
 </style>
 </head>
 <body class="theme-light">
-  <!-- Botão Voltar (cliente retorna à tela de acesso) -->
   <button class="backbtn no-print" onclick="window.location.href='index.html'">← Voltar</button>
+
+  <!-- NOVO: faixa de tentativas -->
+  <div id="quota" class="quota no-print">
+    <div class="dot" aria-hidden="true"></div>
+    <div id="quotaText">Verificando sua sessão…</div>
+    <div class="spacer"></div>
+    <div class="small" id="quotaEmail"></div>
+  </div>
 
   <div class="card">
     <div class="no-print">
@@ -101,7 +111,7 @@
             <label class="row" style="margin:0"><input type="checkbox" id="useRuns"> &nbsp;Usar sequências (1..N) e ignorar datas</label>
           </div>
           <div class="row" style="margin-top:.4rem">
-            <label>Carregar excel sim quer</label>
+            <label>Carregar CSV</label>
             <input id="csv" type="file" accept=".csv,text/csv">
           </div>
         </div>
@@ -148,23 +158,45 @@
 
 <script>
 (function(){
+  // Guard básico por email (UX) — o bloqueio forte está na Edge Function
   (async function guard(){
     try {
       const email = sessionStorage.getItem('lj_email') || localStorage.getItem('lj_email') || '';
-      if (!email) {
-        location.replace('index.html'); return;
-      }
+      if (!email) { location.replace('index.html'); return; }
       const r = await fetch(`/.netlify/functions/entitlements?email=${encodeURIComponent(email)}`, { cache: 'no-store' });
       if (!r.ok) { location.replace('index.html'); return; }
       const j = await r.json();
-      if (j.status !== 'free' && j.status !== 'paid') {
-        location.replace('index.html'); return;
-      }
-      // OK → sigue cargando la página
-    } catch (e) {
-      location.replace('index.html');
-    }
+      if (j.status !== 'free' && j.status !== 'paid') { location.replace('index.html'); return; }
+    } catch (e) { location.replace('index.html'); }
   })();
+
+  // NOVO: mostrar tentativas no topo consultando o server
+  async function updateQuota(){
+    const el = document.getElementById('quota');
+    const txt = document.getElementById('quotaText');
+    const emailEl = document.getElementById('quotaEmail');
+    try{
+      const email = sessionStorage.getItem('lj_email') || localStorage.getItem('lj_email') || '';
+      emailEl.textContent = email ? email : '';
+      const r = await fetch('/.netlify/functions/status', { cache:'no-store' });
+      const j = await r.json();
+      el.classList.remove('free','none');
+      if (j.status === 'free') {
+        el.classList.add('free');
+        txt.innerHTML = 'Acesso <b>livre</b> habilitado.';
+      } else if (j.status === 'paid') {
+        const used = Number(j.used||0), limit = Number(j.limit||3), rem = Math.max(0, Number(j.remaining ?? (limit - used)));
+        txt.innerHTML = `Plano pago: <b>${used} de ${limit}</b> entradas usadas (restam <b>${rem}</b>).`;
+      } else {
+        el.classList.add('none');
+        txt.innerHTML = '<b>Sessão inválida</b>. Retorne à tela de acesso.';
+      }
+    } catch (e){
+      txt.textContent = 'Não foi possível verificar a sessão.';
+    }
+  }
+
+  // ---------- código do gráfico (igual ao teu) ----------
   const svgNS = "http://www.w3.org/2000/svg";
   const chart = document.getElementById('chart');
   const valuesEl = document.getElementById('values');
@@ -205,7 +237,7 @@
   const parseValues = (txt) => {
     if(!txt) return [];
     txt = normalizeText(txt);
-    txt = txt.replace(/(\d),(\d)/g, '$1.$2'); // vírgula -> ponto
+    txt = txt.replace(/(\d),(\d)/g, '$1.$2');
     const parts = txt.split(/[\n;,\s]+/).map(x=>x.trim()).filter(Boolean);
     return parts.map(toNumber).filter(v => Number.isFinite(v));
   };
@@ -256,7 +288,6 @@
     add('rect', {x:0,y:0,width:W,height:H,fill:'var(--bg)'});
     add('text', {x:W/2, y:24, 'text-anchor':'middle', 'font-size':'18', fill:'var(--text)'}).textContent = (titleEl.value||'Levey–Jennings').trim();
 
-    // Grade Y
     const ySteps = 8;
     for(let i=0;i<=ySteps;i++){
       const v = yMin + (i/ySteps)*(yMax - yMin);
@@ -265,7 +296,6 @@
       add('text', {x:mL-8, y:y+4, 'text-anchor':'end', 'font-size':'12', fill:'var(--axis)'}).textContent = v.toFixed(2);
     }
 
-    // Eixo X
     add('line', {x1:mL, y1:H-mB, x2:W-mR, y2:H-mB, stroke:'var(--grid)', 'stroke-width':'1'});
     const maxTicks = Math.max(3, Math.min(40, parseInt(tickMaxEl.value || '12', 10)));
     const step = Math.max(1, Math.ceil(labels.length / maxTicks));
@@ -286,7 +316,6 @@
     add('text', {x:W/2, y:H-12, 'text-anchor':'middle', 'font-size':'12', fill:'var(--text)'}).textContent = labelIsDate? 'Data' : 'Sequência';
     add('text', {x:16, y:H/2, transform:`rotate(-90 16 ${H/2})`, 'text-anchor':'middle', 'font-size':'12', fill:'var(--text)'}).textContent = 'Valor';
 
-    // Linhas de controle
     function hLine(y, dash='4,6', thick=false){
       add('line', {x1:mL, y1:y, x2:W-mR, y2:y, stroke:'var(--accent)', 'stroke-width': thick? '2':'1.25', 'stroke-dasharray': dash});
     }
@@ -295,7 +324,6 @@
     hLine(yScale(m+2*s)); hLine(yScale(m-2*s));
     hLine(yScale(m+3*s)); hLine(yScale(m-3*s));
 
-    // Série
     let d = '';
     vals.forEach((v,i)=>{ const x = xScale(i), y = yScale(v); d += (i? ' L':'M')+x+' '+y; });
     add('path', {d, fill:'none', stroke:seriesColor, 'stroke-width':'2'});
@@ -305,7 +333,6 @@
       add('circle', {cx:x, cy:y, r:4, fill: within3? seriesColor : '#f87171', stroke:'var(--bg)', 'stroke-width':'1.5'});
     });
 
-    // Box de informação
     const info = [
       `Média: ${m.toFixed(3)}`,
       `±1 SD: [${(m-s).toFixed(3)}, ${(m+s).toFixed(3)}]`,
@@ -330,7 +357,6 @@
     draw(vals, labels, isDate);
   }
 
-  // Leitor de CSV
   csvInput.addEventListener('change', function(){
     const file = csvInput.files[0]; if(!file) return;
     const reader = new FileReader();
@@ -397,7 +423,6 @@
   }
   function exportPDF(){ window.print(); }
 
-  // Eventos
   document.getElementById('render').addEventListener('click', drawFromInputs);
   document.getElementById('exportPng').addEventListener('click', exportPNG);
   document.getElementById('exportPdf').addEventListener('click', exportPDF);
@@ -408,10 +433,12 @@
   valuesEl.addEventListener('change', drawFromInputs);
   datesEl.addEventListener('change', drawFromInputs);
 
-  // Defaults
   valuesEl.value = "10.119\n9.967\n10.155\n10.366\n9.944\n9.944\n10.379\n10.184\n10.66\n10.13\n9.889\n9.888\n10.058\n9.541\n9.586\n9.25\n9.757\n10.075\n9.782\n9.661\n10.352\n9.946\n10.016\n10.96\n9.869\n10.027\n9.724\n10.09\n9.856\n9.93\n9.856\n9.37\n9.997\n9.746\n10.197\n9.707\n10.05\n9.53\n9.681\n10.047";
   applyTheme();
   drawFromInputs();
+
+  // chama a faixa de tentativas
+  updateQuota();
 })();
 </script>
 </body>

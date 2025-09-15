@@ -27,6 +27,8 @@ export default async (req, context) => {
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: successUrl,
       cancel_url: cancelUrl,
+      customer_email: email, // <= importante
+      metadata: { app_email: email },
     });
 
     return Response.json({ url: session.url });
