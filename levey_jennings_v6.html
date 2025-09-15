@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Levey–Jennings</title>
+<style>
+  :root{
+    --bg:#0f172a; --card:#111827; --muted:#93a3b0; --text:#e5e7eb;
+    --grid:#1f2937; --axis:#9ca3af; --series:#60a5fa; --accent:#e5e7eb;
+    --field-bg:#0b1020; --field-border:#263148; --field-text:#e5e7eb; --field-placeholder:#94a3b8;
+    --btn-bg:#2563eb; --btn-text:#fff; --btn-secondary:#334155;
+  }
+  /* Tema claro */
+  .theme-light{
+    --bg:#f5f7fb; --card:#ffffff; --muted:#4b5563; --text:#111827;
+    --grid:#e5e7eb; --axis:#475569; --accent:#111827;
+    --field-bg:#ffffff; --field-border:#cbd5e1; --field-text:#111827; --field-placeholder:#6b7280;
+    --btn-bg:#1d4ed8; --btn-text:#fff; --btn-secondary:#e5e7eb;
+  }
+  /* Preto & branco (alto contraste) */
+  .theme-bw{
+    --bg:#ffffff; --card:#ffffff; --muted:#222; --text:#000;
+    --grid:#cfcfcf; --axis:#000; --accent:#000; --series:#000;
+    --field-bg:#ffffff; --field-border:#000; --field-text:#000; --field-placeholder:#444;
+    --btn-bg:#000; --btn-text:#fff; --btn-secondary:#e5e7eb;
+  }
+
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:1.2rem}
+  h1{margin:0 0 .8rem 0;font-size:1.4rem}
+  .card{background:var(--card);border-radius:12px;padding:1rem;max-width:1200px;margin:auto;box-shadow:0 8px 20px rgba(0,0,0,.3)}
+  label{display:block;font-size:.9rem;margin:.4rem 0 .2rem;color:var(--muted)}
+
+  textarea,input,select{
+    width:100%; border:1px solid var(--field-border); color:var(--field-text);
+    background:var(--field-bg); border-radius:10px; padding:.65rem .75rem;
+    font-size:14px; outline:none; box-shadow:0 1px 0 rgba(0,0,0,.03) inset;
+  }
+  textarea::placeholder, input::placeholder{ color:var(--field-placeholder); }
+  select{ appearance:none; background-image:
+      linear-gradient(45deg, transparent 50%, var(--axis) 50%),
+      linear-gradient(135deg, var(--axis) 50%, transparent 50%),
+      linear-gradient(to right, transparent, transparent);
+    background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px), 0 0;
+    background-size: 6px 6px, 6px 6px, 100% 100%; background-repeat: no-repeat;
+    padding-right: 32px;
+  }
+  textarea:focus,input:focus,select:focus{ border-color: var(--btn-bg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--btn-bg) 25%, transparent); }
+
+  input[type="color"]{
+    height: 40px; padding:0; border-radius:8px; cursor:pointer;
+  }
+
+  .grid{display:grid;gap:1rem}
+  @media(min-width:1200px){ .grid{grid-template-columns:2fr 2fr 1fr 1fr} }
+  .actions{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.6rem}
+  button{background:var(--btn-bg); color:var(--btn-text); border:none; padding:.6rem .9rem; border-radius:10px; cursor:pointer; font-weight:700}
+  button.secondary{background:var(--btn-secondary); color:var(--text)}
+  .row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+  .chart-wrap{background:var(--field-bg);border:1px solid var(--field-border);border-radius:12px;padding:1rem;margin-top:1rem}
+  svg{width:100%;height:560px;display:block}
+  .legend{display:flex;gap:1rem;flex-wrap:wrap;margin-top:.5rem}
+  .badge{padding:.2rem .5rem;border-radius:999px;border:1px solid var(--axis);font-size:.8rem;color:var(--text)}
+  .muted{color:var(--muted);font-size:.88rem}
+  .foot{opacity:.85;margin-top:.6rem;font-size:.84rem}
+  .disabled{opacity:.6; pointer-events:none}
+
+  /* Botão Voltar */
+  .backbtn{
+    position:fixed; top:12px; left:12px; z-index:9999;
+    background:#111827; color:#e5e7eb; border:1px solid #263148;
+    padding:8px 12px; border-radius:10px; font-family:system-ui; cursor:pointer;
+  }
+
+  @media print{
+    body{background:#fff;color:#000;padding:0}
+    .card{box-shadow:none;border-radius:0}
+    .no-print{display:none!important}
+    svg{height:800px}
+  }
+</style>
+</head>
+<body class="theme-light">
+  <!-- Botão Voltar (cliente retorna à tela de acesso) -->
+  <button class="backbtn no-print" onclick="window.location.href='index.html'">← Voltar</button>
+
+  <div class="card">
+    <div class="no-print">
+      <h1>Gráfico Levey–Jennings</h1>
+      <p class="muted">Ajuste o tema e insira seus dados. No modo <b>preto e branco</b>, a série é preta e a escolha de cor é desabilitada.</p>
+      <div class="grid">
+        <div>
+          <label>Valores (aceita <code>\n</code>, ; , , ou espaços)</label>
+          <textarea id="values" rows="8" placeholder="10.1&#10;9.9&#10;10.3&#10;..."></textarea>
+        </div>
+        <div>
+          <label>Datas (opcional, uma por linha; mesma quantidade que valores)</label>
+          <textarea id="dates" rows="8" placeholder="2025-09-01&#10;2025-09-02&#10;..."></textarea>
+          <div class="row" style="margin-top:.4rem">
+            <label class="row" style="margin:0"><input type="checkbox" id="useRuns"> &nbsp;Usar sequências (1..N) e ignorar datas</label>
+          </div>
+          <div class="row" style="margin-top:.4rem">
+            <label>Carregar excel sim quer</label>
+            <input id="csv" type="file" accept=".csv,text/csv">
+          </div>
+        </div>
+        <div>
+          <label>Média (opcional)</label>
+          <input id="mean" type="text" placeholder="ex.: 10,0">
+          <label>SD (opcional)</label>
+          <input id="sd" type="text" placeholder="ex.: 0,3">
+          <label for="tickMax">Máx. rótulos no eixo X</label>
+          <input id="tickMax" type="number" min="3" max="40" value="12">
+        </div>
+        <div>
+          <label>Tema</label>
+          <select id="theme">
+            <option value="dark">Escuro</option>
+            <option value="light" selected>Claro</option>
+            <option value="bw">Preto e branco</option>
+          </select>
+          <label>Cor da série</label>
+          <input id="seriesColor" type="color" value="#1f6feb">
+          <label>Título</label>
+          <input id="title" type="text" placeholder="Levey–Jennings">
+          <div class="actions">
+            <button id="render">Gerar gráfico</button>
+            <button id="exportPng" class="secondary">PNG</button>
+            <button id="exportPdf" class="secondary">PDF</button>
+          </div>
+        </div>
+      </div>
+      <p id="msg" class="muted" style="margin-top:.4rem"></p>
+    </div>
+
+    <div class="chart-wrap">
+      <svg id="chart" viewBox="0 0 1200 560" preserveAspectRatio="none" aria-label="Levey–Jennings chart"></svg>
+      <div class="legend no-print">
+        <span class="badge">● Série</span>
+        <span class="badge">— Média</span>
+        <span class="badge">⋯ ±1 SD</span>
+        <span class="badge">⋯ ±2 SD</span>
+        <span class="badge">⋯ ±3 SD</span>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  (async function guard(){
+    try {
+      const email = sessionStorage.getItem('lj_email') || localStorage.getItem('lj_email') || '';
+      if (!email) {
+        location.replace('index.html'); return;
+      }
+      const r = await fetch(`/.netlify/functions/entitlements?email=${encodeURIComponent(email)}`, { cache: 'no-store' });
+      if (!r.ok) { location.replace('index.html'); return; }
+      const j = await r.json();
+      if (j.status !== 'free' && j.status !== 'paid') {
+        location.replace('index.html'); return;
+      }
+      // OK → sigue cargando la página
+    } catch (e) {
+      location.replace('index.html');
+    }
+  })();
+  const svgNS = "http://www.w3.org/2000/svg";
+  const chart = document.getElementById('chart');
+  const valuesEl = document.getElementById('values');
+  const datesEl = document.getElementById('dates');
+  const meanEl = document.getElementById('mean');
+  const sdEl = document.getElementById('sd');
+  const titleEl = document.getElementById('title');
+  const useRunsEl = document.getElementById('useRuns');
+  const tickMaxEl = document.getElementById('tickMax');
+  const themeEl = document.getElementById('theme');
+  const colorEl = document.getElementById('seriesColor');
+  const csvInput = document.getElementById('csv');
+  const btnRender = document.getElementById('render');
+  const btnPng = document.getElementById('exportPng');
+  const btnPdf = document.getElementById('exportPdf');
+  const msgEl = document.getElementById('msg');
+
+  function applyTheme() {
+    document.body.classList.remove('theme-light', 'theme-bw');
+    const v = themeEl.value;
+    if (v === 'light') document.body.classList.add('theme-light');
+    if (v === 'bw') document.body.classList.add('theme-bw');
+    if (v === 'bw') {
+      colorEl.classList.add('disabled');
+      document.documentElement.style.setProperty('--series', '#000000');
+    } else {
+      colorEl.classList.remove('disabled');
+      document.documentElement.style.setProperty('--series', colorEl.value || '#1f6feb');
+    }
+  }
+
+  const toNumber = (s) => {
+    if (s == null) return NaN;
+    s = String(s).trim().replace(/(\d),(\d)/g, '$1.$2').replace(/\s+/g, '');
+    return parseFloat(s);
+  };
+  const normalizeText = (txt) => txt.replace(/\r\n/g, '\n').replace(/\n/g, '\n');
+  const parseValues = (txt) => {
+    if(!txt) return [];
+    txt = normalizeText(txt);
+    txt = txt.replace(/(\d),(\d)/g, '$1.$2'); // vírgula -> ponto
+    const parts = txt.split(/[\n;,\s]+/).map(x=>x.trim()).filter(Boolean);
+    return parts.map(toNumber).filter(v => Number.isFinite(v));
+  };
+  const parseDates = (txt) => {
+    if(!txt) return [];
+    txt = txt.replace(/\r\n/g, '\n').replace(/\n/g, '\n');
+    return txt.split(/\n+/).map(s => s.trim()).filter(Boolean);
+  };
+  const mean = arr => arr.reduce((a,b)=>a+b,0)/arr.length;
+  const sdSample = arr => {
+    if(arr.length<2) return 0;
+    const m = mean(arr);
+    const v = arr.reduce((acc,x)=>acc+(x-m)*(x-m),0)/(arr.length-1);
+    return Math.sqrt(v);
+  };
+
+  function clearSVG() { while (chart.firstChild) chart.removeChild(chart.firstChild); }
+  function add(tag, attrs={}, parent=chart) {
+    const el = document.createElementNS(svgNS, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    parent.appendChild(el);
+    return el;
+  }
+
+  function draw(vals, labels, labelIsDate){
+    if(!vals.length){ msgEl.textContent = "Insira pelo menos um valor."; return; } else { msgEl.textContent=""; }
+
+    const seriesColor = getComputedStyle(document.documentElement).getPropertyValue('--series').trim() || '#1f6feb';
+
+    const mUser = toNumber(meanEl.value);
+    const sdUser = toNumber(sdEl.value);
+    const m = Number.isFinite(mUser) ? mUser : mean(vals);
+    let s = Number.isFinite(sdUser) ? sdUser : sdSample(vals);
+    if(!Number.isFinite(s) || s===0) s = 1e-9;
+
+    clearSVG();
+
+    const W = 1200, H = 560;
+    const mL = 90, mR = 30, mT = 50, mB = 100;
+    const innerW = W - mL - mR;
+    const innerH = H - mT - mB;
+
+    const yMin = Math.min(m - 3*s, ...vals) - 0.1*s;
+    const yMax = Math.max(m + 3*s, ...vals) + 0.1*s;
+    const xScale = i => mL + (i/(vals.length-1||1))*innerW;
+    const yScale = v => mT + (1 - (v - yMin)/(yMax - yMin))*innerH;
+
+    add('rect', {x:0,y:0,width:W,height:H,fill:'var(--bg)'});
+    add('text', {x:W/2, y:24, 'text-anchor':'middle', 'font-size':'18', fill:'var(--text)'}).textContent = (titleEl.value||'Levey–Jennings').trim();
+
+    // Grade Y
+    const ySteps = 8;
+    for(let i=0;i<=ySteps;i++){
+      const v = yMin + (i/ySteps)*(yMax - yMin);
+      const y = yScale(v);
+      add('line', {x1:mL, y1:y, x2:W-mR, y2:y, stroke:'var(--grid)', 'stroke-width':'1', 'stroke-dasharray':'4,6'});
+      add('text', {x:mL-8, y:y+4, 'text-anchor':'end', 'font-size':'12', fill:'var(--axis)'}).textContent = v.toFixed(2);
+    }
+
+    // Eixo X
+    add('line', {x1:mL, y1:H-mB, x2:W-mR, y2:H-mB, stroke:'var(--grid)', 'stroke-width':'1'});
+    const maxTicks = Math.max(3, Math.min(40, parseInt(tickMaxEl.value || '12', 10)));
+    const step = Math.max(1, Math.ceil(labels.length / maxTicks));
+    for(let i=0;i<labels.length;i++){
+      const x = xScale(i);
+      if(i % step === 0){
+        add('line', {x1:x, y1:H-mB, x2:x, y2:H-mB+6, stroke:'var(--axis)', 'stroke-width':'1'});
+        const lbl = labels[i];
+        const t = add('text', {
+          x:x, y:H-mB+30, 'text-anchor':'end', 'font-size':'11', fill:'var(--axis)',
+          transform: labelIsDate ? `rotate(45 ${x} ${H-mB+30})` : ''
+        });
+        t.textContent = lbl;
+      } else {
+        add('line', {x1:x, y1:H-mB, x2:x, y2:H-mB+3, stroke:'var(--grid)', 'stroke-width':'1'});
+      }
+    }
+    add('text', {x:W/2, y:H-12, 'text-anchor':'middle', 'font-size':'12', fill:'var(--text)'}).textContent = labelIsDate? 'Data' : 'Sequência';
+    add('text', {x:16, y:H/2, transform:`rotate(-90 16 ${H/2})`, 'text-anchor':'middle', 'font-size':'12', fill:'var(--text)'}).textContent = 'Valor';
+
+    // Linhas de controle
+    function hLine(y, dash='4,6', thick=false){
+      add('line', {x1:mL, y1:y, x2:W-mR, y2:y, stroke:'var(--accent)', 'stroke-width': thick? '2':'1.25', 'stroke-dasharray': dash});
+    }
+    hLine(yScale(m), '6,0', true);
+    hLine(yScale(m+s)); hLine(yScale(m-s));
+    hLine(yScale(m+2*s)); hLine(yScale(m-2*s));
+    hLine(yScale(m+3*s)); hLine(yScale(m-3*s));
+
+    // Série
+    let d = '';
+    vals.forEach((v,i)=>{ const x = xScale(i), y = yScale(v); d += (i? ' L':'M')+x+' '+y; });
+    add('path', {d, fill:'none', stroke:seriesColor, 'stroke-width':'2'});
+    vals.forEach((v,i)=>{
+      const x = xScale(i), y = yScale(v);
+      const within3 = Math.abs((v-m)/s) <= 3;
+      add('circle', {cx:x, cy:y, r:4, fill: within3? seriesColor : '#f87171', stroke:'var(--bg)', 'stroke-width':'1.5'});
+    });
+
+    // Box de informação
+    const info = [
+      `Média: ${m.toFixed(3)}`,
+      `±1 SD: [${(m-s).toFixed(3)}, ${(m+s).toFixed(3)}]`,
+      `±2 SD: [${(m-2*s).toFixed(3)}, ${(m+2*s).toFixed(3)}]`,
+      `±3 SD: [${(m-3*s).toFixed(3)}, ${(m+3*s).toFixed(3)}]`,
+    ];
+    const boxX = W - 30 - 260, boxY = 60, boxW = 250, boxH = 96;
+    add('rect', {x:boxX, y:boxY, width:boxW, height:boxH, rx:8, ry:8, fill:'var(--bg)', stroke:'var(--grid)'});
+    info.forEach((t, i)=> add('text', {x:boxX+12, y:boxY+22+i*18, 'font-size':'12', fill:'var(--text)'}).textContent = t );
+  }
+
+  function drawFromInputs(){
+    const vals = parseValues(valuesEl.value);
+    const dt = parseDates(datesEl.value);
+    let labels = vals.map((_,i)=> String(i+1));
+    let isDate = false;
+    if (!useRunsEl.checked && dt.length && dt.length === vals.length){
+      labels = dt; isDate = true; msgEl.textContent = "";
+    } else if (dt.length && dt.length !== vals.length) {
+      msgEl.textContent = `⚠️ A quantidade de datas (${dt.length}) não coincide com os valores (${vals.length}). Serão usadas sequências 1..N.`;
+    } else { msgEl.textContent = ""; }
+    draw(vals, labels, isDate);
+  }
+
+  // Leitor de CSV
+  csvInput.addEventListener('change', function(){
+    const file = csvInput.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e){
+      const text = e.target.result;
+      const delim = text.indexOf(';') !== -1 && text.indexOf(',') === -1 ? ';' : ',';
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length>0);
+      if (!lines.length) return alert('CSV vazio');
+      const header = lines[0].split(delim).map(h => h.trim().toLowerCase());
+      const idxDate = header.indexOf('date');
+      const idxValue = header.indexOf('value');
+      const idxMean = header.indexOf('mean');
+      const idxSd = header.indexOf('sd');
+      if (idxValue === -1) return alert('O CSV deve incluir uma coluna "value".');
+      const vals = []; const labels = [];
+      let fixedMean = null, fixedSd = null;
+      for (let i=1;i<lines.length;i++){
+        const parts = lines[i].split(delim).map(s => s.trim());
+        if (!parts.length) continue;
+        const val = toNumber(parts[idxValue]);
+        if (Number.isFinite(val)) {
+          vals.push(val);
+          if (idxDate !== -1 && parts[idxDate]) labels.push(parts[idxDate]);
+          else labels.push(String(i));
+        }
+        if (idxMean !== -1 && fixedMean===null) {
+          const m = toNumber(parts[idxMean]); if (Number.isFinite(m)) fixedMean = m;
+        }
+        if (idxSd !== -1 && fixedSd===null) {
+          const sd = toNumber(parts[idxSd]); if (Number.isFinite(sd)) fixedSd = sd;
+        }
+      }
+      valuesEl.value = vals.join('\n');
+      datesEl.value = labels.join('\n');
+      meanEl.value = fixedMean!=null ? String(fixedMean) : '';
+      sdEl.value = fixedSd!=null ? String(fixedSd) : '';
+      drawFromInputs();
+    };
+    reader.readAsText(file);
+  });
+
+  function exportPNG(){
+    const svgData = new XMLSerializer().serializeToString(chart);
+    const svgBlob = new Blob([svgData], {type:'image/svg+xml;charset=utf-8'});
+    const url = URL.createObjectURL(svgBlob);
+    const img = new Image();
+    img.onload = function(){
+      const canvas = document.createElement('canvas');
+      canvas.width = chart.viewBox.baseVal.width || chart.clientWidth;
+      canvas.height = chart.viewBox.baseVal.height || chart.clientHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg') || '#fff';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.drawImage(img,0,0);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(function(blob){
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = (titleEl.value||'levey_jennings') + '.png';
+        a.click();
+      }, 'image/png');
+    };
+    img.src = url;
+  }
+  function exportPDF(){ window.print(); }
+
+  // Eventos
+  document.getElementById('render').addEventListener('click', drawFromInputs);
+  document.getElementById('exportPng').addEventListener('click', exportPNG);
+  document.getElementById('exportPdf').addEventListener('click', exportPDF);
+  themeEl.addEventListener('change', ()=>{ applyTheme(); drawFromInputs(); });
+  colorEl.addEventListener('input', ()=>{ if(themeEl.value!=='bw'){ applyTheme(); drawFromInputs(); }});
+  tickMaxEl.addEventListener('change', drawFromInputs);
+  useRunsEl.addEventListener('change', drawFromInputs);
+  valuesEl.addEventListener('change', drawFromInputs);
+  datesEl.addEventListener('change', drawFromInputs);
+
+  // Defaults
+  valuesEl.value = "10.119\n9.967\n10.155\n10.366\n9.944\n9.944\n10.379\n10.184\n10.66\n10.13\n9.889\n9.888\n10.058\n9.541\n9.586\n9.25\n9.757\n10.075\n9.782\n9.661\n10.352\n9.946\n10.016\n10.96\n9.869\n10.027\n9.724\n10.09\n9.856\n9.93\n9.856\n9.37\n9.997\n9.746\n10.197\n9.707\n10.05\n9.53\n9.681\n10.047";
+  applyTheme();
+  drawFromInputs();
+})();
+</script>
+</body>
+</html>

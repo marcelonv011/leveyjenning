@@ -1,0 +1,10 @@
+[build]
+  command = ""
+  publish = "."
+
+[functions]
+  node_bundler = "esbuild"
+
+[[edge_functions]]
+  path = "/levey_jennings_v6.html"
+  function = "guard"

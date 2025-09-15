@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Levey–Jennings • Acesso</title>
+<style>
+  :root{
+    --bg: radial-gradient(1200px 800px at 10% -10%, #1f3bff22, transparent 60%),
+          radial-gradient(1000px 700px at 110% 10%, #00e5ff22, transparent 60%),
+          #0b1220;
+    --card:#0f172aee; --border:#1e293b; --text:#e6edf3; --muted:#9aa7b2;
+    --primary:#22c55e; --primary-600:#16a34a; --secondary:#334155; --shadow:0 12px 40px rgba(0,0,0,.35);
+    --info:#0ea5e9; --warn:#f59e0b;
+  }
+  *{box-sizing:border-box} html,body{height:100%}
+  body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;color:var(--text);background:var(--bg);line-height:1.45}
+  .wrap{max-width:1100px;margin:auto;padding:28px 16px}
+  .hero{display:flex;align-items:center;gap:18px;margin-bottom:18px;flex-wrap:wrap}
+  .logo{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,#22c55e33,#22c55e00),#0b1220;border:1px solid #1f2a3b;box-shadow:0 6px 20px rgba(34,197,94,.2)}
+  .logo svg{opacity:.9} h1{margin:0;font-size:1.35rem} .sub{color:var(--muted);margin-top:2px;font-size:.95rem}
+  .grid{display:grid;gap:18px} @media(min-width:980px){.grid{grid-template-columns:1.1fr 1fr}}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:var(--shadow);backdrop-filter:blur(6px)}
+  .card h2{margin:0 0 10px 0;font-size:1.1rem} .muted{color:var(--muted)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input[type="email"]{flex:1 1 260px;padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:#0b1228;color:var(--text);outline:none}
+  input::placeholder{color:#8fa0ad}
+  button{padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:var(--secondary);color:var(--text);cursor:pointer;font-weight:700}
+  button.primary{background:var(--primary);border-color:var(--primary-600);color:#07130d}
+  button.primary:hover{background:var(--primary-600);color:#fff}
+  button.ghost{background:transparent}
+  .btns{display:flex;gap:10px;flex-wrap:wrap}.hidden{display:none}
+  .msg{margin-top:8px;font-size:.95rem}.msg.err{color:#fecaca}.msg.info{color:#c7d2fe}
+
+  /* Tarja de aviso */
+  .notice{
+    border:1px solid #1f2a3b; background:#0b1228; color:#e6edf3;
+    padding:10px 12px; border-radius:12px; display:flex; gap:10px; align-items:flex-start;
+  }
+  .notice .dot{width:10px;height:10px;border-radius:999px;background:var(--warn);margin-top:6px}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <div class="logo" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" stroke="#22c55e" stroke-width="2"/>
+          <path d="M4 14c4-6 12-6 16 0" stroke="#22c55e" stroke-width="2" />
+          <path d="M6 10c3-3 9-3 12 0" stroke="#22c55e" stroke-width="2" opacity=".6"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Levey–Jennings • Acesso</h1>
+        <div class="sub">Entre com seu e‑mail para continuar.</div>
+      </div>
+    </div>
+
+    <!-- Aviso de 3 acessos -->
+    <div class="notice" style="margin-bottom:14px;">
+      <div class="dot" aria-hidden="true"></div>
+      <div>
+        <b>Aviso:</b> o acesso do plano pago permite até <b>3 entradas</b> na tela do gráfico.
+        Após atingir o limite, será necessário solicitar nova liberação.
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="stack">
+        <!-- LOGIN -->
+        <div id="login" class="card">
+          <h2>Entrar</h2>
+          <p class="muted">Digite seu e‑mail e clique em <b>Continuar</b>.</p>
+          <div class="row">
+            <input id="email" type="email" placeholder="voce@exemplo.com" autocomplete="email" />
+            <button class="primary" onclick="check()">Continuar</button>
+          </div>
+          <div id="msg" class="msg"></div>
+        </div>
+
+        <!-- PAYWALL -->
+        <div id="paywall" class="card hidden">
+          <h2>Acesso indisponível</h2>
+          <p class="muted">Finalize o pagamento para liberar o acesso. Se já pagou, clique em <b>Verificar acesso</b>.</p>
+          <div class="btns">
+            <button class="primary" onclick="pay()">Pagar</button>
+            <button class="ghost" onclick="recheck()">Verificar acesso</button>
+            <button class="ghost" onclick="logout()">Trocar e‑mail</button>
+          </div>
+          <div id="msgPay" class="msg info"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Bem‑vindo</h2>
+        <p class="muted">O acesso é individual por e‑mail.</p>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const emailInput = document.getElementById('email');
+  const login = document.getElementById('login');
+  const paywall = document.getElementById('paywall');
+  const msg = document.getElementById('msg');
+  const msgPay = document.getElementById('msgPay');
+
+  let userEmail = localStorage.getItem('lj_email') || "";
+
+  function setState(s){
+    login.classList.toggle('hidden', s!=='login');
+    paywall.classList.toggle('hidden', s!=='paywall');
+    history.replaceState({view:s}, "", location.href);
+  }
+  function showMsg(target, text, kind='info'){
+    if (!target) return; target.textContent = text || ''; target.className = 'msg ' + (kind || 'info');
+  }
+
+  // Redireciona para a função de login que define cookie assinado e aplica o limite de 3 acessos
+  function goToApp(){
+    const email = (userEmail || emailInput.value || '').trim().toLowerCase();
+    if (!email) return;
+    window.location.href = `/.netlify/functions/login?email=${encodeURIComponent(email)}`;
+  }
+
+  async function check(){
+    try{
+      const e = (emailInput.value || '').trim().toLowerCase();
+      if(!e || !e.includes('@')) { showMsg(msg, 'Digite um e‑mail válido.', 'err'); return; }
+      userEmail = e; localStorage.setItem('lj_email', e);
+      showMsg(msg, 'Verificando...', 'info');
+      const r = await fetch(`/.netlify/functions/entitlements?email=${encodeURIComponent(e)}`);
+      if(!r.ok){ showMsg(msg, 'Não foi possível verificar agora. Tente novamente.', 'err'); return; }
+      const json = await r.json();
+      if (json.status === 'free' || json.status === 'paid') {
+        showMsg(msg, '');
+        goToApp(); // passa por login.js (onde o limite é controlado)
+      } else {
+        showMsg(msg, '');
+        setState('paywall');
+        showMsg(msgPay, 'Acesso não encontrado para este e‑mail.', 'info');
+      }
+    }catch(err){ showMsg(msg, 'Erro de rede: ' + err.message, 'err'); }
+  }
+
+  async function recheck(){ if (userEmail || emailInput.value) await check(); else showMsg(msg, 'Digite um e‑mail primeiro.', 'err'); }
+
+  async function pay(){
+    try{
+      const e = userEmail || emailInput.value;
+      if (!e){ showMsg(msgPay, 'Digite um e‑mail primeiro.', 'err'); return; }
+      showMsg(msgPay, 'Abrindo checkout…', 'info');
+      const r = await fetch(`/.netlify/functions/create-checkout-session`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email: e })
+      });
+      if(!r.ok){ showMsg(msgPay, `Não foi possível abrir o checkout (${r.status}).`, 'err'); return; }
+      const { url } = await r.json(); if (!url){ showMsg(msgPay, 'URL de checkout indisponível.', 'err'); return; }
+      location.href = url;
+    }catch(err){ showMsg(msgPay, 'Erro de rede: ' + err.message, 'err'); }
+  }
+
+  function logout(){
+    localStorage.removeItem('lj_email');
+    sessionStorage.removeItem('lj_status');
+    userEmail = "";
+    emailInput.value = "";
+    showMsg(msg, ''); showMsg(msgPay, '');
+    setState('login');
+  }
+
+  if (new URLSearchParams(location.search).get('logout') === '1') { logout(); }
+  else { if (userEmail) emailInput.value = userEmail; setState('login'); }
+</script>
+</body>
+</html>
